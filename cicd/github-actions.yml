@@ -1,0 +1,24 @@
+name: FinTech CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Build Docker Image
+        run: |
+          echo "Building Docker image..."
+          docker build -t fintech-app .
+
+      - name: Deploy to Kubernetes
+        run: |
+          echo "Deploying to Kubernetes..."
+          kubectl apply -f kubernetes/
