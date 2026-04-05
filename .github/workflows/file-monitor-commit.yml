@@ -1,0 +1,51 @@
+# This pipeline checks for changes in pipelines.yml file for consumer repositories and notify Opsgenie about it 
+
+name: Monitor Prohibited File Changes Made by Commit
+
+on:
+  push:
+    branches:
+      - main  # You can list more branches or remove this line to run on all branches
+    paths:
+      - '.github/workflows/pipelines.yml'  # Optimizes to trigger only when specific paths are updated
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: read
+
+jobs:
+  check-prohibited-files-commit:
+    runs-on: ubuntu24-2core-arm64
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Check if specified file has changed
+        id: check_change
+        run: |
+          echo "Checking if '.github/workflows/pipelines.yml' is among the changes..."
+          # Fetch the depth necessary to see changes. Default fetch depth is 1, or last commit.
+          git fetch --no-tags --prune --depth=5 origin +refs/heads/main:refs/remotes/origin/main
+          # Check latest commits for file change
+          if git diff --name-only HEAD^ HEAD | grep '.github/workflows/pipelines.yml'; then
+            echo "Specified file pipelines.yml was changed."
+            echo "::set-output name=file_changed::true"
+          else
+            echo "Specified files were not changed."
+            echo "::set-output name=file_changed::false"
+          fi
+      - name: Output result
+        if: steps.check_change.outputs.file_changed == 'true'
+        run: |
+          echo "File '.github/workflows/pipelines.yml' was changed in the last commit"
+          echo "SHA: "${{ github.sha }}"
+          echo "Repository: "${{ github.repository }}"
+      - name: Send notification to Opsgenie
+        if: steps.check_change.outputs.file_changed == 'true'
+        uses: eonx-com/actions-opsgenie@master
+        with:
+          API_KEY: ${{ secrets.GH_OPSGENIE_API_KEY }}   # Secret GH_OPSGENIE_API_KEY is specified on org level and relates to Github Actions API integration in Opsgenie
+          PRIORITY: 'P4'
+          ALIAS: 'file-monitor-triggered-"${{ github.repository }}'
+          MESSAGE: 'The .github/workflows/pipelines.yml file was changed in the repository: "${{ github.repository }} in commit "${{ github.sha }}. '
+          use_eu_instance: true

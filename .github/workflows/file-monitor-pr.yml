@@ -1,0 +1,50 @@
+# This pipeline prohibits changes in pipelines.yml file for consumer repositories
+
+name: Monitor Prohibited File Changes Made by PR
+
+on:
+  pull_request:
+    types: [synchronize, opened, reopened]
+    branches:
+      - main # You can list more branches or remove this line to run on all branches
+    paths:
+      - .github/workflows/pipelines.yml # You can list more files to prohibit merge with it, don't forget to add them into echo in this case
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: read
+
+jobs:
+  check-pr-index:
+    runs-on: ubuntu24-2core-arm64
+    outputs:
+      is_first_pr: ${{ steps.check_first_pr.outputs.first_pr }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Check if First PR
+        id: check_first_pr
+        uses: actions/github-script@v5
+        with:
+          script: |
+            const prs = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open'
+            });
+            const isFirstPR = prs.data.length === 1;
+            core.setOutput('first_pr', isFirstPR);
+  
+  drop-workflow:
+    needs: check-pr-index
+    if: needs.check-pr-index.outputs.is_first_pr != 'true'
+    name: Drop workflow
+    runs-on: ubuntu24-2core-arm64
+    steps:
+    - name: Fail the workflow because monitored file was changed
+      run: |
+          echo "The file .github/workflows/pipelines.yml was modified, merging is prohibited."
+          exit 1
+      shell: bash
